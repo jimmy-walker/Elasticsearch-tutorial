@@ -86,9 +86,11 @@ npm安装依赖，到elasticsearch-head-master目录下，运行命令：
 Kibana使用html和js开发的，需要运行在Node.js，所以在下载的Kibana包中包含了Node平台。
  Kibana的版本要和Elasticsearch版本一直，不支持主版本不一致(比如5.x 和2.x)，次版本不一致(比如5.2和5.1)会在logger中打印报警信息，允许补丁版本不一致但是不建议。
 
-解压缩到安装目录。运行bin\kibana.bat在[http://localhost:5601](http://localhost:5601/) 看是否成功。
+解压缩到安装目录。运行bin\kibana.bat在[http://localhost:5601](http://localhost:5601/) 看是否成功。可以通过按`Ctrl-C`停止。
 
-.点击dev tools，就可以操作ES了。
+点击dev tools，就可以操作ES了。
+
+![](picture/kibana.png)
 
 **直接用git bash会出现`invalid utf-8`的编码问题，用了git-bash改了编码都不行。**
 
