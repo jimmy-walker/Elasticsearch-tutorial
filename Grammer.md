@@ -191,6 +191,8 @@ POST /customer/external/1/_update?pretty
 
 ### 批处理
 
+The bulk API makes it possible to perform many index/delete operations in a single API call. This can greatly increase the indexing speed.  
+
 
 
 ### 创建映射
