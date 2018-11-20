@@ -42,6 +42,16 @@ Document 使用 JSON 格式表示，下面是一个例子。
 
 同一个 Index 里面的 Document，不要求有相同的结构（scheme），但是最好保持相同，这样有利于提高搜索效率。
 
+文档唯一标识由四个元数据字段组成：
+
+`_id`：文档的字符串 ID
+
+`_type`：文档的类型名
+
+`_index`：文档所在的索引
+
+`_uid`：`_type` 和 `_id` 连接成的 `type#id`
+
 ### Type
 
 Document 可以分组，比如`weather`这个 Index 里面，可以按城市分组（北京和上海），也可以按气候分组（晴天和雨天）。这种分组就叫做 Type，它是虚拟的逻辑分组，用来过滤 Document。
@@ -189,10 +199,55 @@ POST /customer/external/1/_update?pretty
 
 ![](picture/document_update.jpg)
 
-### 批处理
+### 批处理bulk
 
 The bulk API makes it possible to perform many index/delete operations in a single API call. This can greatly increase the indexing speed.  
 
+#### json格式
+
+```jsong
+action and meta_data \n
+optional source \n
+action and meta_data \n
+optional source \n
+```
+
+两行数据构成了一次操作，第一行是操作类型可以index，create，update，或者delete，第二行就是我们的可选的数据体，使用这种方式批量插入的时候，我们需要设置的它的Content-Type为application/json。
+
+针对不同的操作类型，第二行里面的可选的数据体是不一样的，如下：
+
+```
+（1）index 和 create  第二行是source数据体
+（2）delete 没有第二行
+（3）update 第二行可以是partial doc，upsert或者是script
+```
+
+我们可以将我们的操作直接写入到一个文本文件中，然后使用curl命令把它发送到服务端：
+
+一个requests文件内容如下（这里的操作就是index）：
+
+```
+{ "index" : { "index" : "test", "type" : "doc", "id" : "1" } }
+{ "field1" : "value1" }
+```
+
+发送命令如下：
+
+```linux
+curl -s -H "Content-Type: application/x-ndjson" -XPOST localhost:9200/_bulk --data-binary "@requests"; echo
+```
+
+响应结果如下：
+
+```
+{"took":7, "errors": false, "items":[{"index":{"index":"test","type":"doc","id":"1","_version":1,"result":"created","forced_refresh":false}}]}
+```
+
+#### create和index实际操作是一样的
+
+"index" indexes a document. "create" only indexes a document if it doesn't already exist. It used to be that "create" was faster if you knew that your docs didn't already exist. But now, since versioning was added, "index" performs as well as "create".
+
+#### 一般都是用es的python接口直接传，这里使用脚本写成json，再用bulk传
 
 
 ### 创建映射
@@ -262,3 +317,5 @@ GET entertainment/music/_search
 - [官方教程《Elasticsearch - The Definitive Guide》基于2.X，部分API过时，但是内容合理](https://www.elastic.co/guide/en/elasticsearch/guide/current/index.html)
 - [官方技术文档《Elasticsearch Reference》](https://www.elastic.co/guide/en/elasticsearch/reference/current/index.html)
 - [映射详解](https://blog.csdn.net/napoay/article/details/73100110#12-text%E7%B1%BB%E5%9E%8B)
+- [Bulk Api](https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html)
+- [python将txt转bulk支持的json](https://stackoverflow.com/questions/41440791/index-a-pandas-dataframe-into-elasticsearch-without-elasticsearch-py#comment70094758_41440791)
