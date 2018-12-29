@@ -175,7 +175,7 @@ GET /customer/external/1?pretty
 
 而将要更新的内容嵌套在了`doc`字段中。 
 
-**更新的时候需要script 或者doc。但是其本身不会被放到更新的字段中去。
+**更新的时候需要script 或者doc。但是其本身不会被放到更新的字段中去。**
 
 `ctx._source`指的是当前document。
 
@@ -202,6 +202,12 @@ POST /customer/external/1/_update?pretty
 ### 批处理bulk
 
 The bulk API makes it possible to perform many index/delete operations in a single API call. This can greatly increase the indexing speed.  
+
+#### curl命令格式
+
+The endpoints are `/_bulk`, `/{index}/_bulk`, and `{index}/{type}/_bulk`.  
+
+因此这三种后缀都可以，如果没有type的话，那就在json中指定也行。也就是说如果在json中置顶了type，其实就不用在curl中指定type了。
 
 #### json格式
 
@@ -249,6 +255,134 @@ curl -s -H "Content-Type: application/x-ndjson" -XPOST localhost:9200/_bulk --da
 
 #### 一般都是用es的python接口直接传，这里使用脚本写成json，再用bulk传
 
+```python
+import json
+import pandas as pd
+import numpy as np
+from sklearn import preprocessing
+import re
+import seaborn as sns
+import matplotlib.pyplot as plt
+from functools import reduce
+%matplotlib inline
+sns.set(style="white", palette="muted", color_codes=True)
+def remove_bracket(item):
+#     rule = re.compile(r"\([^\(\)]*\)$|（[^\(\)]*）$")
+# \s空白符，\S非空白符，所以[\s\S]是任意字符
+#     rule = re.compile(r"\([\s\S]*\)$|（[\s\S]*）$|（[\s\S]*\)$|\([\s\S]*）$")
+    rule = re.compile(r"\([^\(\)（）]*\)|（[^\(\)（）]*）|（[^\(\)（）]*\)|\([^\(\)（）]*）")
+    return rule.sub('',item).lower()
+#dfsingertemp[dfsingertemp['name'].str.contains("\(")]
+#dfsingertemp[dfsingertemp['name'].str.contains("（")]
+
+#use () to extract the specific content, it will return a tuple of list
+def get_quote(item):
+    edition_list = re.findall(r"《([^《》]*)》", item) #to avoid: 幸福路上》的《幸福一生
+    if edition_list: # it means not empty list []
+        return edition_list[0] # only save the first one
+    else:
+        return ""
+
+def strQ2B(ustring):
+    ss = []
+    for s in ustring:
+        rstring = ""
+        for uchar in s:
+            inside_code = ord(uchar)
+            if inside_code == 12288:  # 全角空格直接转换
+                inside_code = 32
+            elif (inside_code >= 65281 and inside_code <= 65374):  # 全角字符（除空格）根据关系转化
+                inside_code -= 65248
+            rstring += chr(inside_code)
+        ss.append(rstring)
+    return ''.join(ss)
+
+#remove punctuation and lower
+#     we cannot use it, cause it will remove some other language eg: Japan
+#     rule = re.compile(r"[^a-zA-Z0-9\u4e00-\u9fa5]") 
+#we do not remove the dfsingertemp[dfsingertemp['name'].str.contains("、")], just remove the symbol as follow
+def normal_item(item):
+#     * . ? + $ ^ [ ] ( ) { } | \ / " '
+#     we use \
+#     englisth symbol
+#     chinese symbol, remember ’‘ are two parts, as well as ”“
+#     remember - hyphen is special  it need to be first
+    rule = re.compile(r"[\*\.\?\+\$\^\[\]\(\)\{\}\|\/\"\'\\]+|[-~`!@#%&=;:<>,_]+|[\s～—`！…×（）·「」’‘：;”“？《》，。￥【】°︽︷]+")
+    return rule.sub('',item).lower()
+
+rep_item = {"unitedstatesmarineband":"marineband"}
+def replace_item(item):
+    if item in rep_item.keys():
+        return rep_item.get(item)
+    else:
+        return item
+    
+def remove_describe(df_line):
+    if df_line["sextype"] in [6,7,8,9,10,11]:
+        rule = re.compile(r"电影$|电视剧$|动画$|动画片$|游戏$")
+        return rule.sub('',df_line["singer"]).lower()
+    else:
+        return df_line["singer"]
+    
+df_all = pd.read_csv("kg_info.csv", header=0,sep="\t",names=['mixsongid', 'songname', 'albumname', 'singername', 'sextype',  'remark'], error_bad_lines=False).drop_duplicates()
+df_all[['songname', 'albumname', 'singername', 'remark']] = df_all[['songname', 'albumname', 'singername', 'remark']].fillna('')   
+df_basic = df_all.dropna().reset_index(drop=True)          
+
+df_basic["song"] = df_basic["songname"].apply(strQ2B).apply(remove_bracket).apply(normal_item) 
+df_basic["album"] = df_basic["albumname"].apply(strQ2B).apply(remove_bracket).apply(normal_item) 
+df_basic["singer"] = df_basic["singername"].apply(strQ2B).apply(remove_bracket).apply(normal_item)
+df_basic["variety"] = df_basic["remark"].apply(get_quote).apply(strQ2B).apply(remove_bracket).apply(normal_item)  
+df_basic['singer'] = df_basic.apply(remove_describe, axis=1) #to remove some specific words
+df_final = df_basic[["singer", "song", "album", "variety"]].drop_duplicates().reset_index(drop=True)
+
+```
+
+
+
+```python
+df_final['_id'] = df_final.index
+df_to_json = df_final.to_json(orient='records', lines=True,force_ascii=False)
+#force_ascii=False will suit chinese
+final_json_string = ''
+for json_document in df_to_json.split('\n'):
+    jdict = json.loads(json_document)
+    metadata = json.dumps({'index': {'_index':'entertainment', '_type':'music', '_id': jdict['_id']}})
+    jdict.pop('_id')
+    final_json_string += metadata + '\n' + json.dumps(jdict,ensure_ascii=False) + '\n' 
+    #ensure_ascii=False will suit chinese
+with open('entertainment.json', 'w') as outfile:
+    outfile.write(final_json_string)
+```
+
+#### 具体设置
+
+设置`http.max_content_length`，以保证`bulk`传输，默认为100M，此处有162M。
+
+否则会直接提交没有反应。
+
+```
+#直接在config/elasticsearch.yml中添加
+http.max_content_length: 200mb
+```
+
+设置`Jvm`的堆大小，以避免错误：
+
+![](picture/Jvm.jpg)
+
+```
+#直接在config/jvm.options中添加
+-Xms3g
+-Xmx3g
+```
+
+然后直接发送即可
+
+```linux
+curl -H 'Content-Type: application/x-ndjson' -XPOST 'localhost:9200/entertainment/_bulk?pretty' --data-binary @entertainment.json
+```
+
+
+
 
 ### 创建映射
 
@@ -274,6 +408,9 @@ PUT entertainment
           "type": "keyword"
         },
         "album": {
+          "type": "keyword"
+        },
+        "variety": {
           "type": "keyword"
         }        
       }
@@ -319,3 +456,5 @@ GET entertainment/music/_search
 - [映射详解](https://blog.csdn.net/napoay/article/details/73100110#12-text%E7%B1%BB%E5%9E%8B)
 - [Bulk Api](https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html)
 - [python将txt转bulk支持的json](https://stackoverflow.com/questions/41440791/index-a-pandas-dataframe-into-elasticsearch-without-elasticsearch-py#comment70094758_41440791)
+- [es的jvm设置](https://blog.csdn.net/laoyang360/article/details/79998974)
+- [es的http大小设置](http://www.rendoumi.com/wang-elasticsearchli-dao-ru-shu-ju/)
