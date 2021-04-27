@@ -94,6 +94,12 @@ Kibana使用html和js开发的，需要运行在Node.js，所以在下载的Kiba
 
 **直接用git bash会出现`invalid utf-8`的编码问题，用了git-bash改了编码都不行。**
 
+## 安装Logstash
+
+也采用与Elasticsearch一样的版本[下载](https://www.elastic.co/cn/downloads/logstash)。
+
+
+
 ## Reference
 
 - [全文搜索引擎 Elasticsearch 入门教程](http://www.ruanyifeng.com/blog/2017/08/elasticsearch.html)
